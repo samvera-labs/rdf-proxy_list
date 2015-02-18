@@ -57,6 +57,52 @@ describe RDF::ProxyList do
     before { subject.concat(uris) }
   end
 
+  shared_context 'with a bad list graph' do
+    let(:ns) { RDF::URI('http://example.org/') }
+    let(:aggregator) { ns/:agg }
+    let(:first) { ns/1 }
+    let(:second) { ns/2 }
+    let(:last) { ns/3 }
+    let(:bad_graph) do
+      # build a graph with two firsts and two lasts
+      aggregator = ns/:agg
+      graph = RDF::Graph.new
+
+      first_proxy1 = RDF::URI.new(:b1)
+      first_proxy2 = RDF::URI.new(:b1a)
+      second_proxy = RDF::URI.new(:b2)
+      last_proxy1 = RDF::URI.new(:b3)
+      last_proxy2 = RDF::URI.new(:b3a)
+
+      graph << [aggregator, RDF::IANA['first'], first_proxy1]
+      graph << [first_proxy1, RDF::ORE['proxyFor'], first]
+      graph << [first_proxy1, RDF::ORE['proxyIn'], aggregator]
+      graph << [first_proxy1, RDF::IANA['next'], second_proxy]
+
+      graph << [aggregator, RDF::IANA['first'], first_proxy2]
+      graph << [first_proxy2, RDF::ORE['proxyFor'], first]
+      graph << [first_proxy2, RDF::ORE['proxyIn'], aggregator]
+      graph << [first_proxy2, RDF::IANA['next'], second_proxy]
+
+      graph << [second_proxy, RDF::ORE['proxyFor'], second]
+      graph << [second_proxy, RDF::IANA['prev'], first_proxy1]
+      graph << [second_proxy, RDF::IANA['next'], last_proxy1]
+      graph << [second_proxy, RDF::IANA['next'], last_proxy2]
+      graph << [second_proxy, RDF::ORE['proxyIn'], aggregator]
+
+      graph << [aggregator, RDF::IANA['last'], last_proxy1]
+      graph << [last_proxy1, RDF::ORE['proxyFor'], last]
+      graph << [last_proxy1, RDF::IANA['prev'], second_proxy]
+      graph << [last_proxy1, RDF::ORE['proxyIn'], aggregator]
+
+      graph << [aggregator, RDF::IANA['last'], last_proxy2]
+      graph << [last_proxy2, RDF::ORE['proxyFor'], last]
+      graph << [last_proxy2, RDF::IANA['prev'], second_proxy]
+      graph << [last_proxy2, RDF::ORE['proxyIn'], aggregator]
+      graph
+    end
+  end
+
   it 'will have an aggregator that is an RDF::Resource' do
     expect(subject.aggregator.to_uri).to eq('http://example.org/agg')
   end
@@ -94,27 +140,72 @@ describe RDF::ProxyList do
   end
 
   describe '.first_from_graph' do
-    it 'returns first item'
+    include_context 'with values'
+    include_context 'with a bad list graph'
 
-    it 'raises error when more than one first is present'
+    let(:graph) { described_class.new(aggregator).concat(uris).graph }
 
-    it 'returns nil for empty list'
+    it 'returns the first item' do
+      expect(
+        described_class.first_from_graph(subject.aggregator, subject.graph)
+      ).to eq uris.first
+    end
+
+    it 'raises error when more than one first is present' do
+      expect {
+        described_class.first_from_graph(aggregator, bad_graph)
+      }.to raise_error RDF::ProxyList::InvalidProxyListGraph
+    end
+
+    it 'returns nil for empty list' do
+      expect(
+        described_class.first_from_graph(aggregator, RDF::Graph.new)
+      ).to be_nil
+    end
   end
 
   describe '.last_from_graph' do
-    it 'returns first item'
+    include_context 'with values'
+    include_context 'with a bad list graph'
 
-    it 'raises error when more than one last is present'
+    let(:graph) { described_class.new(aggregator).concat(uris).graph }
 
-    it 'returns ?? for empty list'
+    it 'returns the last item' do
+      expect(
+        described_class.last_from_graph(subject.aggregator, subject.graph)
+      ).to eq uris.last
+    end
+
+    it 'raises error when more than one last is present' do
+      expect {
+        described_class.last_from_graph(aggregator, bad_graph)
+      }.to raise_error RDF::ProxyList::InvalidProxyListGraph
+    end
+
+    it 'returns nil for empty list' do
+      expect(
+        described_class.last_from_graph(aggregator, RDF::Graph.new)
+      ).to be_nil
+    end
   end
 
   describe '.query_next_node' do
-    it 'returns first item'
+    include_context 'with a bad list graph'
+    include_context 'with values'
+    
+    let(:graph) { described_class.new(aggregator).concat(uris).graph }
+    
+    it 'raises error when more than one next is present' do
+      expect {
+        described_class.query_next_node(bad_graph, second)
+      }.to raise_error RDF::ProxyList::InvalidProxyListGraph
+    end
 
-    it 'raises error when more than one next is present'
-
-    it 'raises nil when there is no next item'
+    it 'raises nil when there is no next item' do
+      expect(
+        described_class.query_next_node(bad_graph, uris.last)
+      ).to be_nil
+    end
   end
 
   describe '#<<' do
